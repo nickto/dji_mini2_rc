@@ -23,15 +23,11 @@ EVENTS = (
     uinput.ABS_THROTTLE + (0, 32767, 0, 0),
     uinput.ABS_RUDDER + (0, 32767, 0, 0),
 )
-ST = {"rh": 0, "rv": 0, "lh": 0, "lv": 0, "b1": 0, "b2": 0, "b3": 0, "b4": 0, "t1": 0}
-
-device = uinput.Device(EVENTS)
-time.sleep(1)
 
 
-def calc_checksum(packet, plength):
+def calculate_checksum(packet, packet_length):
     # fmt: off
-    crc = [
+    crc_table = [
         0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
         0x8c48, 0x9dc1, 0xaf5a, 0xbed3, 0xca6c, 0xdbe5, 0xe97e, 0xf8f7,
         0x1081, 0x0108, 0x3393, 0x221a, 0x56a5, 0x472c, 0x75b7, 0x643e,
@@ -73,15 +69,15 @@ def calc_checksum(packet, plength):
     # v = 0x7000 # Naza M V2
     v = 0x3692  # P3/P4/Mavic
 
-    for i in range(0, plength):
+    for i in range(0, packet_length):
         vv = v >> 8
-        v = vv ^ crc[((packet[i] ^ v) & 0xFF)]
+        v = vv ^ crc_table[((packet[i] ^ v) & 0xFF)]
     return v
 
 
-def calc_pkt55_hdr_checksum(seed, packet, plength):
+def calculate_header_checksum(seed, packet, packet_length):
     # fmt: off
-    arr_2A103 = [
+    header_checksum_table = [
         0x00,0x5E,0xBC,0xE2,0x61,0x3F,0xDD,0x83,0xC2,0x9C,0x7E,0x20,0xA3,0xFD,0x1F,0x41,
         0x9D,0xC3,0x21,0x7F,0xFC,0xA2,0x40,0x1E,0x5F,0x01,0xE3,0xBD,0x3E,0x60,0x82,0xDC,
         0x23,0x7D,0x9F,0xC1,0x42,0x1C,0xFE,0xA0,0xE1,0xBF,0x5D,0x03,0x80,0xDE,0x3C,0x62,
@@ -101,14 +97,13 @@ def calc_pkt55_hdr_checksum(seed, packet, plength):
     ]
     # fmt: on
 
-    chksum = seed
-    for i in range(0, plength):
-        chksum = arr_2A103[((packet[i] ^ chksum) & 0xFF)]
-    return chksum
+    checksum = seed
+    for i in range(0, packet_length):
+        checksum = header_checksum_table[((packet[i] ^ checksum) & 0xFF)]
+    return checksum
 
 
-def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
-    global sequence_number
+def send_duml(serial_conn, source, target, cmd_type, cmd_set, cmd_id, payload=None):
     sequence_number = 0x34EB
     packet = bytearray.fromhex("55")
     length = 13
@@ -123,8 +118,8 @@ def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
     packet += struct.pack(
         "B", (length >> 8) | 0x4
     )  # MSB of length and protocol version
-    hdr_crc = calc_pkt55_hdr_checksum(0x77, packet, 3)
-    packet += struct.pack("B", hdr_crc)
+    header_checksum = calculate_header_checksum(0x77, packet, 3)
+    packet += struct.pack("B", header_checksum)
     packet += struct.pack("B", source)
     packet += struct.pack("B", target)
     packet += struct.pack("<H", sequence_number)
@@ -135,33 +130,30 @@ def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
     if payload is not None:
         packet += payload
 
-    crc = calc_checksum(packet, len(packet))
-    packet += struct.pack("<H", crc)
-    s.write(packet)
-    # print(' '.join(format(x, '02x') for x in packet))
-
-    sequence_number += 1
+    checksum = calculate_checksum(packet, len(packet))
+    packet += struct.pack("<H", checksum)
+    serial_conn.write(packet)
 
 
 # Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)
-def parseInput(input, name):
-    output = (int.from_bytes(input, byteorder="little") - 364) * 4096 // 165
+def parse_channel_value(raw_bytes, channel_name):
+    output = (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
 
     return output
 
 
-def threaded_function():
+def emit_input_events(device, state):
     while True:
         time.sleep(0.1)
-        device.emit(uinput.ABS_X, int(ST["lh"]), syn=False)
-        device.emit(uinput.ABS_Y, int(ST["lv"]), syn=False)
-        device.emit(uinput.ABS_THROTTLE, int(ST["rh"]), syn=False)
-        device.emit(uinput.ABS_RUDDER, int(ST["rv"]))
-        device.emit(uinput.BTN_PINKIE, int(ST["b1"]))
-        device.emit(uinput.BTN_TRIGGER, int(ST["b2"]))
-        device.emit(uinput.BTN_THUMB, int(ST["b3"]))
-        device.emit(uinput.BTN_THUMB2, int(ST["b4"]))
-        device.emit(uinput.ABS_WHEEL, int(ST["t1"]))
+        device.emit(uinput.ABS_X, int(state["lh"]), syn=False)
+        device.emit(uinput.ABS_Y, int(state["lv"]), syn=False)
+        device.emit(uinput.ABS_THROTTLE, int(state["rh"]), syn=False)
+        device.emit(uinput.ABS_RUDDER, int(state["rv"]))
+        device.emit(uinput.BTN_PINKIE, int(state["b1"]))
+        device.emit(uinput.BTN_TRIGGER, int(state["b2"]))
+        device.emit(uinput.BTN_THUMB, int(state["b3"]))
+        device.emit(uinput.BTN_THUMB2, int(state["b4"]))
+        device.emit(uinput.ABS_WHEEL, int(state["t1"]))
 
 
 app = typer.Typer(
@@ -175,44 +167,61 @@ def main(
         str, typer.Option("--port", "-p", help="RC Serial Port")
     ] = "/dev/ttyACM0",
 ):
+    device = uinput.Device(EVENTS)
+    time.sleep(1)
+
+    state = {
+        "rh": 0,
+        "rv": 0,
+        "lh": 0,
+        "lv": 0,
+        "b1": 0,
+        "b2": 0,
+        "b3": 0,
+        "b4": 0,
+        "t1": 0,
+    }
+
     # Open serial.
     try:
-        s = serial.Serial(port=port, baudrate=115200)
-        console.print(f"[green]✓[/green] Opened serial device: [bold]{s.name}[/bold]")
+        serial_conn = serial.Serial(port=port, baudrate=115200)
+        console.print(
+            f"[green]✓[/green] Opened serial device: [bold]{serial_conn.name}[/bold]"
+        )
     except serial.SerialException as e:
         console.print(f"[bold red]✗ Could not open serial device:[/bold red] {e}")
         raise typer.Exit(1)
 
     console.print("\n[dim]Press Ctrl+C (or interrupt) to stop.[/dim]\n")
 
-    thread = Thread(target=threaded_function, args=(), daemon=True)
+    thread = Thread(target=emit_input_events, args=(device, state), daemon=True)
     thread.start()
 
     try:
         # Enable simulator mode for RC (without this stick positions are sent very slow by RC)
-        send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x24, bytearray.fromhex("01"))
+        send_duml(serial_conn, 0x0A, 0x06, 0x40, 0x06, 0x24, bytearray.fromhex("01"))
 
         while True:
             # Read channel values
-            send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x01, bytearray.fromhex(""))
-            send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x27, bytearray.fromhex(""))
+            send_duml(serial_conn, 0x0A, 0x06, 0x40, 0x06, 0x01, bytearray.fromhex(""))
+            send_duml(serial_conn, 0x0A, 0x06, 0x40, 0x06, 0x27, bytearray.fromhex(""))
 
             # Read DUML
             buffer = bytearray.fromhex("")
             while True:
-                b = s.read(1)
-                if b == bytearray.fromhex("55"):
-                    buffer.extend(b)
-                    ph = s.read(2)
-                    buffer.extend(ph)
-                    ph = struct.unpack("<H", ph)[0]
-                    pl = 0b0000001111111111 & ph
-                    pv = 0b1111110000000000 & ph
-                    pv = pv >> 10
-                    pc = s.read(1)
-                    buffer.extend(pc)
-                    pd = s.read(pl - 4)
-                    buffer.extend(pd)
+                byte = serial_conn.read(1)
+                if byte == bytearray.fromhex("55"):
+                    buffer.extend(byte)
+                    packet_header = serial_conn.read(2)
+                    buffer.extend(packet_header)
+                    packet_header = struct.unpack("<H", packet_header)[0]
+                    packet_length = 0b0000001111111111 & packet_header
+                    protocol_version = 0b1111110000000000 & packet_header
+                    protocol_version = protocol_version >> 10
+                    packet_cmd = serial_conn.read(1)
+                    buffer.extend(packet_cmd)
+                    packet_data = serial_conn.read(packet_length - 4)
+                    buffer.extend(packet_data)
                     break
                 else:
                     break
@@ -220,13 +229,13 @@ def main(
             # Reverse-engineered: these two DUML reply lengths (38, 58) consistently carry controller input.
             if len(buffer) == 38:
                 # Continuous controls (sticks and wheel)
-                ST["rh"] = parseInput(buffer[13:15], "lv")
-                ST["rv"] = parseInput(buffer[16:18], "lh")
+                state["rh"] = parse_channel_value(buffer[13:15], "lv")
+                state["rv"] = parse_channel_value(buffer[16:18], "lh")
 
-                ST["lv"] = parseInput(buffer[19:21], "rv")
-                ST["lh"] = parseInput(buffer[22:24], "rh")
+                state["lv"] = parse_channel_value(buffer[19:21], "rv")
+                state["lh"] = parse_channel_value(buffer[22:24], "rh")
 
-                camera = parseInput(buffer[25:27], "cam")
+                camera = parse_channel_value(buffer[25:27], "cam")
 
                 logger.trace(
                     f"Buffer: {len(buffer)}\t"
@@ -236,23 +245,31 @@ def main(
 
             elif len(buffer) == 58:
                 # Discrete controls (buttons)
-                bytes = buffer[28:30]
-                ival = int.from_bytes(bytes, byteorder="big")
-                bits = bin(ival).lstrip("0b")
-                logger.trace(f"ival:  {ival}\tbits:  {bits}")
+                button_bytes = buffer[28:30]
+                button_flags = int.from_bytes(button_bytes, byteorder="big")
+                button_bits = bin(button_flags).lstrip("0b")
+                logger.trace(
+                    f"button_flags:  {button_flags}\tbutton_bits:  {button_bits}"
+                )
 
-                ST["b1"] = 1 if ival & 0x1060 == 0x1060 else 0
-                ST["b2"] = 1 if ival & 0x1080 == 0x1080 else 0
-                ST["b3"] = 1 if ival & 0x1004 == 0x1004 else 0
-                ST["b4"] = 1 if ival & 0x1002 == 0x1002 else 0
+                state["b1"] = 1 if button_flags & 0x1060 == 0x1060 else 0
+                state["b2"] = 1 if button_flags & 0x1080 == 0x1080 else 0
+                state["b3"] = 1 if button_flags & 0x1004 == 0x1004 else 0
+                state["b4"] = 1 if button_flags & 0x1002 == 0x1002 else 0
 
-                bytes2 = buffer[27:29]
-                ival2 = int.from_bytes(bytes2, byteorder="big")
-                bits2 = bin(ival2).lstrip("0b")
-                logger.trace(f"ival2: {ival2}\tbits2: {bits2}")
+                throttle_bytes = buffer[27:29]
+                throttle_flags = int.from_bytes(throttle_bytes, byteorder="big")
+                throttle_bits = bin(throttle_flags).lstrip("0b")
+                logger.trace(
+                    f"throttle_flags: {throttle_flags}\tthrottle_bits: {throttle_bits}"
+                )
 
-                ST["t1"] = (
-                    32767 if ival2 == 0x0 else -32767 if ival2 & 0x20 == 0x20 else 0
+                state["t1"] = (
+                    32767
+                    if throttle_flags == 0x0
+                    else -32767
+                    if throttle_flags & 0x20 == 0x20
+                    else 0
                 )
 
                 logger.trace(

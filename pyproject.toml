@@ -1,0 +1,20 @@
+[project]
+name = "dji-mini2-rc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nick To", email = "nick@nickto.net" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pyserial==3.5",
+    "python-uinput==0.11.2",
+]
+
+[project.scripts]
+dji-mini2-rc = "dji_mini2_rc.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

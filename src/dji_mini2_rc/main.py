@@ -174,7 +174,9 @@ app = typer.Typer(
 
 @app.command()
 def main(
-    port: Annotated[str, typer.Option("--port", "-p", help="RC Serial Port")],
+    port: Annotated[
+        str, typer.Option("--port", "-p", help="RC Serial Port")
+    ] = "/dev/ttyACM0",
 ):
     # Open serial.
     try:

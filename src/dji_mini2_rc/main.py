@@ -7,6 +7,9 @@ import serial
 import typer
 import uinput
 from loguru import logger
+from rich.console import Console
+
+console = Console()
 
 maxValue = 32768
 
@@ -65,9 +68,9 @@ def calc_checksum(packet, plength):
     # fmt: on
 
     # Seeds
-    # v = 0x1012 #Naza M
-    # v = 0x1013 #Phantom 2
-    # v = 0x7000 #Naza M V2
+    # v = 0x1012 # Naza M
+    # v = 0x1013 # Phantom 2
+    # v = 0x7000 # Naza M V2
     v = 0x3692  # P3/P4/Mavic
 
     for i in range(0, plength):
@@ -113,7 +116,7 @@ def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
         length = length + len(payload)
 
     if length > 0x3FF:
-        print("Packet too large")
+        console.print("[bold red]Error:[/bold red] Packet too large")
         exit(1)
 
     packet += struct.pack("B", length & 0xFF)
@@ -153,7 +156,6 @@ st = {"rh": 0, "rv": 0, "lh": 0, "lv": 0, "b1": 0, "b2": 0, "b3": 0, "b4": 0, "t
 def threaded_function():
     while True:
         time.sleep(0.1)
-        # print("working ...")
         device.emit(uinput.ABS_X, int(st["lh"]), syn=False)
         device.emit(uinput.ABS_Y, int(st["lv"]), syn=False)
         device.emit(uinput.ABS_THROTTLE, int(st["rh"]), syn=False)
@@ -177,29 +179,26 @@ def main(
     # Open serial.
     try:
         s = serial.Serial(port=port, baudrate=115200)
-        print("Opened serial device:", s.name)
+        console.print(f"[green]✓[/green] Opened serial device: [bold]{s.name}[/bold]")
     except serial.SerialException as e:
-        print("Could not open serial device:", e)
-        exit(1)
+        console.print(f"[bold red]✗ Could not open serial device:[/bold red] {e}")
+        raise typer.Exit(1)
 
-    # Stylistic: Newline for spacing.
-    print("\nPress Ctrl+C (or interrupt) to stop.\n")
+    console.print("\n[dim]Press Ctrl+C (or interrupt) to stop.[/dim]\n")
 
-    thread = Thread(target=threaded_function, args=())
+    thread = Thread(target=threaded_function, args=(), daemon=True)
     thread.start()
-    # thread.join()
 
     try:
-        # enable simulator mode for RC (without this stick positions are sent very slow by RC)
+        # Enable simulator mode for RC (without this stick positions are sent very slow by RC)
         send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x24, bytearray.fromhex("01"))
 
         while True:
-            # time.sleep(0.05)
-            # read channel values
+            # Read channel values
             send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x01, bytearray.fromhex(""))
             send_duml(s, 0x0A, 0x06, 0x40, 0x06, 0x27, bytearray.fromhex(""))
 
-            # read duml
+            # Read DUML
             buffer = bytearray.fromhex("")
             while True:
                 b = s.read(1)
@@ -220,25 +219,9 @@ def main(
                     break
             data = buffer
 
-            if len(data) == 21:
-                # Unsolicited DUML push (cmd_set=0x06, cmd_id=0x26) from module 0x0e, sent
-                # continuously on its own schedule (sequence number keeps climbing regardless
-                # of our polling). Its payload tracks stick movement, but it's a duplicate of
-                # the same positions we already get from the len-38 reply to our own
-                # cmd_id 0x01 request above, parsed by another module for its own purposes
-                # (e.g. RC screen/OSD). Intentionally dropped.
-                #
-                # First to short-circuit this packet.
-                logger.trace(
-                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
-                )
-
-            elif len(data) == 58:
-                # print(str(len(data)) + "\t" + ' '.join(format(x, '02x') for x in data))
-                pass
-
-            # Reverse-engineered. Controller input seems to always be len 38 and 58 for two duml commands respectively
-            elif len(data) == 38:
+            # Reverse-engineered: these two DUML reply lengths (38, 58) consistently carry controller input.
+            if len(data) == 38:
+                # Continuous controls (sticks and wheel)
                 st["rh"] = parseInput(data[13:15], "lv")
                 st["rv"] = parseInput(data[16:18], "lh")
 
@@ -247,12 +230,18 @@ def main(
 
                 camera = parseInput(data[25:27], "cam")
 
+                logger.trace(
+                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                )
+                continue
+
             elif len(data) == 58:
+                # Discrete controls (buttons)
                 bytes = data[28:30]
                 ival = int.from_bytes(bytes, byteorder="big")
                 bits = bin(ival).lstrip("0b")
-                # print(ival & 0x2060 == 0x2060)
-                # print(bits)
+                logger.trace(f"ival:  {ival}\tbits:  {bits}")
+
                 st["b1"] = 1 if ival & 0x1060 == 0x1060 else 0
                 st["b2"] = 1 if ival & 0x1080 == 0x1080 else 0
                 st["b3"] = 1 if ival & 0x1004 == 0x1004 else 0
@@ -261,9 +250,35 @@ def main(
                 bytes2 = data[27:29]
                 ival2 = int.from_bytes(bytes2, byteorder="big")
                 bits2 = bin(ival2).lstrip("0b")
+                logger.trace(f"ival2: {ival2}\tbits2: {bits2}")
+
                 st["t1"] = (
                     32767 if ival2 == 0x0 else -32767 if ival2 & 0x20 == 0x20 else 0
                 )
+
+                logger.trace(
+                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                )
+                continue
+
+            # Other common packet lengths
+            elif len(data) == 21:
+                # Unsolicited DUML push (cmd_set=0x06, cmd_id=0x26) from module 0x0e, sent
+                # continuously. Its payload tracks stick movement, but it's a duplicate of
+                # the same positions we already get from the len-38 reply to our own
+                # cmd_id 0x01 request above. Intentionally dropped.
+                logger.trace(
+                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                )
+                continue
+
+            elif len(data) == 19:
+                # A periodic packet of the same value. A heartbeat?
+                logger.trace(
+                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                )
+                continue
+
             else:
                 logger.debug(
                     f"Unknown packet length: {len(data)}\t"
@@ -271,12 +286,13 @@ def main(
                 )
 
     except serial.SerialException as e:
-        logger.error("Could not read/write:", e)
+        logger.error(f"Could not read/write: {e}")
 
     except KeyboardInterrupt:
-        typer.echo("Detected keyboard interrupt.")
+        console.print("\n[yellow]Detected keyboard interrupt.[/yellow]")
 
-    typer.echo("Stopping.")
+    console.print("[dim]Stopping.[/dim]")
+    raise typer.Exit(0)
 
 
 if __name__ == "__main__":

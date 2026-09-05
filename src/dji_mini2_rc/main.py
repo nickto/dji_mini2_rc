@@ -11,9 +11,8 @@ from rich.console import Console
 
 console = Console()
 
-maxValue = 32768
-
-events = (
+MAX_VALUE = 32768
+EVENTS = (
     uinput.BTN_PINKIE,
     uinput.BTN_TRIGGER,
     uinput.BTN_THUMB,
@@ -24,8 +23,9 @@ events = (
     uinput.ABS_THROTTLE + (0, 32767, 0, 0),
     uinput.ABS_RUDDER + (0, 32767, 0, 0),
 )
+ST = {"rh": 0, "rv": 0, "lh": 0, "lv": 0, "b1": 0, "b2": 0, "b3": 0, "b4": 0, "t1": 0}
 
-device = uinput.Device(events)
+device = uinput.Device(EVENTS)
 time.sleep(1)
 
 
@@ -150,21 +150,18 @@ def parseInput(input, name):
     return output
 
 
-st = {"rh": 0, "rv": 0, "lh": 0, "lv": 0, "b1": 0, "b2": 0, "b3": 0, "b4": 0, "t1": 0}
-
-
 def threaded_function():
     while True:
         time.sleep(0.1)
-        device.emit(uinput.ABS_X, int(st["lh"]), syn=False)
-        device.emit(uinput.ABS_Y, int(st["lv"]), syn=False)
-        device.emit(uinput.ABS_THROTTLE, int(st["rh"]), syn=False)
-        device.emit(uinput.ABS_RUDDER, int(st["rv"]))
-        device.emit(uinput.BTN_PINKIE, int(st["b1"]))
-        device.emit(uinput.BTN_TRIGGER, int(st["b2"]))
-        device.emit(uinput.BTN_THUMB, int(st["b3"]))
-        device.emit(uinput.BTN_THUMB2, int(st["b4"]))
-        device.emit(uinput.ABS_WHEEL, int(st["t1"]))
+        device.emit(uinput.ABS_X, int(ST["lh"]), syn=False)
+        device.emit(uinput.ABS_Y, int(ST["lv"]), syn=False)
+        device.emit(uinput.ABS_THROTTLE, int(ST["rh"]), syn=False)
+        device.emit(uinput.ABS_RUDDER, int(ST["rv"]))
+        device.emit(uinput.BTN_PINKIE, int(ST["b1"]))
+        device.emit(uinput.BTN_TRIGGER, int(ST["b2"]))
+        device.emit(uinput.BTN_THUMB, int(ST["b3"]))
+        device.emit(uinput.BTN_THUMB2, int(ST["b4"]))
+        device.emit(uinput.ABS_WHEEL, int(ST["t1"]))
 
 
 app = typer.Typer(
@@ -223,16 +220,17 @@ def main(
             # Reverse-engineered: these two DUML reply lengths (38, 58) consistently carry controller input.
             if len(buffer) == 38:
                 # Continuous controls (sticks and wheel)
-                st["rh"] = parseInput(buffer[13:15], "lv")
-                st["rv"] = parseInput(buffer[16:18], "lh")
+                ST["rh"] = parseInput(buffer[13:15], "lv")
+                ST["rv"] = parseInput(buffer[16:18], "lh")
 
-                st["lv"] = parseInput(buffer[19:21], "rv")
-                st["lh"] = parseInput(buffer[22:24], "rh")
+                ST["lv"] = parseInput(buffer[19:21], "rv")
+                ST["lh"] = parseInput(buffer[22:24], "rh")
 
                 camera = parseInput(buffer[25:27], "cam")
 
                 logger.trace(
-                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
+                    f"Buffer: {len(buffer)}\t"
+                    + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
@@ -243,22 +241,23 @@ def main(
                 bits = bin(ival).lstrip("0b")
                 logger.trace(f"ival:  {ival}\tbits:  {bits}")
 
-                st["b1"] = 1 if ival & 0x1060 == 0x1060 else 0
-                st["b2"] = 1 if ival & 0x1080 == 0x1080 else 0
-                st["b3"] = 1 if ival & 0x1004 == 0x1004 else 0
-                st["b4"] = 1 if ival & 0x1002 == 0x1002 else 0
+                ST["b1"] = 1 if ival & 0x1060 == 0x1060 else 0
+                ST["b2"] = 1 if ival & 0x1080 == 0x1080 else 0
+                ST["b3"] = 1 if ival & 0x1004 == 0x1004 else 0
+                ST["b4"] = 1 if ival & 0x1002 == 0x1002 else 0
 
                 bytes2 = buffer[27:29]
                 ival2 = int.from_bytes(bytes2, byteorder="big")
                 bits2 = bin(ival2).lstrip("0b")
                 logger.trace(f"ival2: {ival2}\tbits2: {bits2}")
 
-                st["t1"] = (
+                ST["t1"] = (
                     32767 if ival2 == 0x0 else -32767 if ival2 & 0x20 == 0x20 else 0
                 )
 
                 logger.trace(
-                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
+                    f"Buffer: {len(buffer)}\t"
+                    + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
@@ -269,14 +268,16 @@ def main(
                 # the same positions we already get from the len-38 reply to our own
                 # cmd_id 0x01 request above. Intentionally dropped.
                 logger.trace(
-                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
+                    f"Buffer: {len(buffer)}\t"
+                    + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
             elif len(buffer) == 19:
                 # A periodic packet of the same value. A heartbeat?
                 logger.trace(
-                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
+                    f"Buffer: {len(buffer)}\t"
+                    + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 

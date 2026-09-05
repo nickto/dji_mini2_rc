@@ -117,7 +117,7 @@ def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
 
     if length > 0x3FF:
         console.print("[bold red]Error:[/bold red] Packet too large")
-        exit(1)
+        raise typer.Exit(1)
 
     packet += struct.pack("B", length & 0xFF)
     packet += struct.pack(

@@ -1,18 +1,11 @@
-import argparse
 import struct
 import time
 from threading import Thread
+from typing import Annotated
 
 import serial
+import typer
 import uinput
-
-parser = argparse.ArgumentParser(
-    description="DJI Mini 2 RC (also known as RC-N1, RCS231, WM161b-RC-N1, RCN1) <-> Linux joystick interface (uinput)"
-)
-
-parser.add_argument("-p", "--port", help="RC Serial Port", required=True)
-
-args = parser.parse_args()
 
 maxValue = 32768
 
@@ -146,18 +139,6 @@ def send_duml(s, source, target, cmd_type, cmd_set, cmd_id, payload=None):
     sequence_number += 1
 
 
-# Open serial.
-try:
-    s = serial.Serial(port=args.port, baudrate=115200)
-    print("Opened serial device:", s.name)
-except serial.SerialException as e:
-    print("Could not open serial device:", e)
-    exit(1)
-
-# Stylistic: Newline for spacing.
-print("\nPress Ctrl+C (or interrupt) to stop.\n")
-
-
 # Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)
 def parseInput(input, name):
     output = (int.from_bytes(input, byteorder="little") - 364) * 4096 // 165
@@ -183,7 +164,26 @@ def threaded_function():
         device.emit(uinput.ABS_WHEEL, int(st["t1"]))
 
 
-def main():
+app = typer.Typer(
+    help="DJI Mini 2 RC (also known as RC-N1, RCS231, WM161b-RC-N1, RCN1) <-> Linux joystick interface (uinput)"
+)
+
+
+@app.command()
+def main(
+    port: Annotated[str, typer.Option("--port", "-p", help="RC Serial Port")],
+):
+    # Open serial.
+    try:
+        s = serial.Serial(port=port, baudrate=115200)
+        print("Opened serial device:", s.name)
+    except serial.SerialException as e:
+        print("Could not open serial device:", e)
+        exit(1)
+
+    # Stylistic: Newline for spacing.
+    print("\nPress Ctrl+C (or interrupt) to stop.\n")
+
     thread = Thread(target=threaded_function, args=())
     thread.start()
     # thread.join()
@@ -270,4 +270,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app()

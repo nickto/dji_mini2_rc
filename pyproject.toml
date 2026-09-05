@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Nick To", email = "nick@nickto.net" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.11"
 dependencies = [
     "loguru>=0.7.3",
     "pyserial==3.5",

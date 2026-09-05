@@ -25,7 +25,7 @@ EVENTS = (
 )
 
 
-def calculate_checksum(packet, packet_length):
+def calculate_checksum(packet: bytearray, packet_length: int) -> int:
     # fmt: off
     crc_table = [
         0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
@@ -75,7 +75,7 @@ def calculate_checksum(packet, packet_length):
     return v
 
 
-def calculate_header_checksum(seed, packet, packet_length):
+def calculate_header_checksum(seed: int, packet: bytearray, packet_length: int) -> int:
     # fmt: off
     header_checksum_table = [
         0x00,0x5E,0xBC,0xE2,0x61,0x3F,0xDD,0x83,0xC2,0x9C,0x7E,0x20,0xA3,0xFD,0x1F,0x41,
@@ -103,7 +103,15 @@ def calculate_header_checksum(seed, packet, packet_length):
     return checksum
 
 
-def send_duml(serial_conn, source, target, cmd_type, cmd_set, cmd_id, payload=None):
+def send_duml(
+    serial_conn: serial.Serial,
+    source: int,
+    target: int,
+    cmd_type: int,
+    cmd_set: int,
+    cmd_id: int,
+    payload: bytearray | None = None,
+) -> None:
     sequence_number = 0x34EB
     packet = bytearray.fromhex("55")
     length = 13
@@ -136,13 +144,13 @@ def send_duml(serial_conn, source, target, cmd_type, cmd_set, cmd_id, payload=No
 
 
 # Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)
-def parse_channel_value(raw_bytes, channel_name):
+def parse_channel_value(raw_bytes: bytes, channel_name: str) -> int:
     output = (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
 
     return output
 
 
-def emit_input_events(device, state):
+def emit_input_events(device: uinput.Device, state: dict[str, int]) -> None:
     while True:
         time.sleep(0.1)
         device.emit(uinput.ABS_X, int(state["lh"]), syn=False)
@@ -166,7 +174,7 @@ def main(
     port: Annotated[
         str, typer.Option("--port", "-p", help="RC Serial Port")
     ] = "/dev/ttyACM0",
-):
+) -> None:
     device = uinput.Device(EVENTS)
     time.sleep(1)
 

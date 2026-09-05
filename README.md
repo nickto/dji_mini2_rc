@@ -14,9 +14,10 @@ Connect your DJI Remote Controller to your PC and use it to play simulators.
 
 ## Usage
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Connect your RC via the bottom Type-C USB connector to your laptop
-3. Run:
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+2. Power on you RC.
+3. Connect your RC via the bottom Type-C USB connector to your laptop.
+4. Run:
 
    ```sh
    sudo uv run dji-mini2-rc -p /dev/ttyACM0

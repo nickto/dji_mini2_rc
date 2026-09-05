@@ -210,7 +210,7 @@ def main(
             buffer = bytearray.fromhex("")
 
             byte = serial_conn.read(1)
-            if byte == bytearray.fromhex("55"):
+            if byte == bytes.fromhex("55"):
                 buffer.extend(byte)
                 packet_header = serial_conn.read(2)
                 buffer.extend(packet_header)

@@ -217,27 +217,26 @@ def main(
                     break
                 else:
                     break
-            data = buffer
 
             # Reverse-engineered: these two DUML reply lengths (38, 58) consistently carry controller input.
-            if len(data) == 38:
+            if len(buffer) == 38:
                 # Continuous controls (sticks and wheel)
-                st["rh"] = parseInput(data[13:15], "lv")
-                st["rv"] = parseInput(data[16:18], "lh")
+                st["rh"] = parseInput(buffer[13:15], "lv")
+                st["rv"] = parseInput(buffer[16:18], "lh")
 
-                st["lv"] = parseInput(data[19:21], "rv")
-                st["lh"] = parseInput(data[22:24], "rh")
+                st["lv"] = parseInput(buffer[19:21], "rv")
+                st["lh"] = parseInput(buffer[22:24], "rh")
 
-                camera = parseInput(data[25:27], "cam")
+                camera = parseInput(buffer[25:27], "cam")
 
                 logger.trace(
-                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
-            elif len(data) == 58:
+            elif len(buffer) == 58:
                 # Discrete controls (buttons)
-                bytes = data[28:30]
+                bytes = buffer[28:30]
                 ival = int.from_bytes(bytes, byteorder="big")
                 bits = bin(ival).lstrip("0b")
                 logger.trace(f"ival:  {ival}\tbits:  {bits}")
@@ -247,7 +246,7 @@ def main(
                 st["b3"] = 1 if ival & 0x1004 == 0x1004 else 0
                 st["b4"] = 1 if ival & 0x1002 == 0x1002 else 0
 
-                bytes2 = data[27:29]
+                bytes2 = buffer[27:29]
                 ival2 = int.from_bytes(bytes2, byteorder="big")
                 bits2 = bin(ival2).lstrip("0b")
                 logger.trace(f"ival2: {ival2}\tbits2: {bits2}")
@@ -257,32 +256,32 @@ def main(
                 )
 
                 logger.trace(
-                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
             # Other common packet lengths
-            elif len(data) == 21:
+            elif len(buffer) == 21:
                 # Unsolicited DUML push (cmd_set=0x06, cmd_id=0x26) from module 0x0e, sent
                 # continuously. Its payload tracks stick movement, but it's a duplicate of
                 # the same positions we already get from the len-38 reply to our own
                 # cmd_id 0x01 request above. Intentionally dropped.
                 logger.trace(
-                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
-            elif len(data) == 19:
+            elif len(buffer) == 19:
                 # A periodic packet of the same value. A heartbeat?
                 logger.trace(
-                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                    f"Buffer: {len(buffer)}\t" + " ".join(format(x, "02x") for x in buffer)
                 )
                 continue
 
             else:
                 logger.debug(
-                    f"Unknown packet length: {len(data)}\t"
-                    + " ".join(format(x, "02x") for x in data)
+                    f"Unknown packet length: {len(buffer)}\t"
+                    + " ".join(format(x, "02x") for x in buffer)
                 )
 
     except serial.SerialException as e:

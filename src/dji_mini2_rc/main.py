@@ -6,6 +6,7 @@ from typing import Annotated
 import serial
 import typer
 import uinput
+from loguru import logger
 
 maxValue = 32768
 
@@ -218,12 +219,26 @@ def main(
                 else:
                     break
             data = buffer
-            if len(data) == 58:
+
+            if len(data) == 21:
+                # Unsolicited DUML push (cmd_set=0x06, cmd_id=0x26) from module 0x0e, sent
+                # continuously on its own schedule (sequence number keeps climbing regardless
+                # of our polling). Its payload tracks stick movement, but it's a duplicate of
+                # the same positions we already get from the len-38 reply to our own
+                # cmd_id 0x01 request above, parsed by another module for its own purposes
+                # (e.g. RC screen/OSD). Intentionally dropped.
+                #
+                # First to short-circuit this packet.
+                logger.trace(
+                    f"Buffer: {len(data)}\t" + " ".join(format(x, "02x") for x in data)
+                )
+
+            elif len(data) == 58:
                 # print(str(len(data)) + "\t" + ' '.join(format(x, '02x') for x in data))
                 pass
 
             # Reverse-engineered. Controller input seems to always be len 38 and 58 for two duml commands respectively
-            if len(data) == 38:
+            elif len(data) == 38:
                 st["rh"] = parseInput(data[13:15], "lv")
                 st["rv"] = parseInput(data[16:18], "lh")
 
@@ -232,7 +247,7 @@ def main(
 
                 camera = parseInput(data[25:27], "cam")
 
-            if len(data) == 58:
+            elif len(data) == 58:
                 bytes = data[28:30]
                 ival = int.from_bytes(bytes, byteorder="big")
                 bits = bin(ival).lstrip("0b")
@@ -249,24 +264,19 @@ def main(
                 st["t1"] = (
                     32767 if ival2 == 0x0 else -32767 if ival2 & 0x20 == 0x20 else 0
                 )
-                # print(st)
-                # with uinput.Device(events) as device:
-    #            time.sleep(0.1)
-    # else:
-    # print(len(data))
+            else:
+                logger.debug(
+                    f"Unknown packet length: {len(data)}\t"
+                    + " ".join(format(x, "02x") for x in data)
+                )
 
-    # Log to console.
-    # print('L: H{0:06d},V{1:06d}; R: H{2:06d},V{3:06d}, CAM: {4:06d}\n'.format(left_horizontal, left_vertical, right_horizontal, right_vertical, camera), end='')
     except serial.SerialException as e:
-        # Stylistic: Newline to stop data update and spacing.
-        print("\n\nCould not read/write:", e)
+        logger.error("Could not read/write:", e)
+
     except KeyboardInterrupt:
-        # Stylistic: Newline to stop data update and spacing.
-        print("\n\nDetected keyboard interrupt.")
+        typer.echo("Detected keyboard interrupt.")
 
-        pass
-
-    print("Stopping.")
+    typer.echo("Stopping.")
 
 
 if __name__ == "__main__":

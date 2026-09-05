@@ -208,23 +208,20 @@ def main(
 
             # Read DUML
             buffer = bytearray.fromhex("")
-            while True:
-                byte = serial_conn.read(1)
-                if byte == bytearray.fromhex("55"):
-                    buffer.extend(byte)
-                    packet_header = serial_conn.read(2)
-                    buffer.extend(packet_header)
-                    packet_header = struct.unpack("<H", packet_header)[0]
-                    packet_length = 0b0000001111111111 & packet_header
-                    protocol_version = 0b1111110000000000 & packet_header
-                    protocol_version = protocol_version >> 10
-                    packet_cmd = serial_conn.read(1)
-                    buffer.extend(packet_cmd)
-                    packet_data = serial_conn.read(packet_length - 4)
-                    buffer.extend(packet_data)
-                    break
-                else:
-                    break
+
+            byte = serial_conn.read(1)
+            if byte == bytearray.fromhex("55"):
+                buffer.extend(byte)
+                packet_header = serial_conn.read(2)
+                buffer.extend(packet_header)
+                packet_header = struct.unpack("<H", packet_header)[0]
+                packet_length = 0b0000001111111111 & packet_header
+                protocol_version = 0b1111110000000000 & packet_header
+                protocol_version = protocol_version >> 10
+                packet_cmd = serial_conn.read(1)
+                buffer.extend(packet_cmd)
+                packet_data = serial_conn.read(packet_length - 4)
+                buffer.extend(packet_data)
 
             # Reverse-engineered: these two DUML reply lengths (38, 58) consistently carry controller input.
             if len(buffer) == 38:

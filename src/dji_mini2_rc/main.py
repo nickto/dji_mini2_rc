@@ -143,11 +143,9 @@ def send_duml(
     serial_conn.write(packet)
 
 
-# Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)
 def parse_channel_value(raw_bytes: bytes, channel_name: str) -> int:
-    output = (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
-
-    return output
+    """Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)."""
+    return (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
 
 
 def emit_input_events(device: uinput.Device, state: dict[str, int]) -> None:

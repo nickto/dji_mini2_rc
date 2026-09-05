@@ -1,7 +1,7 @@
 [project]
 name = "dji-mini2-rc"
 version = "0.1.0"
-description = "Add your description here"
+description = "DJI Mini 2 RC <-> Linux joystick interface"
 readme = "README.md"
 authors = [
     { name = "Nick To", email = "nick@nickto.net" }

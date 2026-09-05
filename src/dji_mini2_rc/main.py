@@ -140,12 +140,14 @@ def send_duml(
 
     checksum = calculate_checksum(packet, len(packet))
     packet += struct.pack("<H", checksum)
-    serial_conn.write(packet)
+    _ = serial_conn.write(packet)
 
 
-def parse_channel_value(raw_bytes: bytes, channel_name: str) -> int:
+def parse_channel_value(raw_bytes: bytes | bytearray, channel_name: str) -> int:
     """Process input (min 364, center 1024, max 1684) -> (min 0, center 16384, max 32768)."""
-    return (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
+    output = (int.from_bytes(raw_bytes, byteorder="little") - 364) * 4096 // 165
+    logger.trace(f"Channel {channel_name}: {int.from_bytes(raw_bytes, byteorder='little')} -> {output}")
+    return output
 
 
 def emit_input_events(device: uinput.Device, state: dict[str, int]) -> None:
@@ -238,7 +240,7 @@ def main(
                 state["lv"] = parse_channel_value(buffer[19:21], "rv")
                 state["lh"] = parse_channel_value(buffer[22:24], "rh")
 
-                camera = parse_channel_value(buffer[25:27], "cam")
+                camera = parse_channel_value(buffer[25:27], "cam")  # noqa: F841 # pyright: ignore[reportUnusedVariable]
 
                 logger.trace(
                     f"Buffer: {len(buffer)}\t"
